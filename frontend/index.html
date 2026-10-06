@@ -1,0 +1,245 @@
+<title>Digit Recognizer</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f5f5f7;
+    --panel: #ffffff;
+    --text: #1d1d1f;
+    --muted: #6e6e73;
+    --accent: #3b82f6;
+    --border: #d2d2d7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #121212;
+      --panel: #1e1e1e;
+      --text: #f0f0f0;
+      --muted: #a0a0a5;
+      --accent: #5b9dff;
+      --border: #3a3a3c;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px;
+    width: 100%;
+    max-width: 420px;
+  }
+  h1 { font-size: 1.4rem; margin: 0 0 4px; }
+  p.sub { color: var(--muted); margin: 0 0 20px; font-size: 0.9rem; }
+  #canvas {
+    display: block;
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    background: #000;
+    border-radius: 8px;
+    touch-action: none;
+    cursor: crosshair;
+  }
+  .row { display: flex; gap: 8px; margin-top: 12px; }
+  button, .upload-btn {
+    flex: 1;
+    padding: 10px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text);
+    font-size: 0.95rem;
+    cursor: pointer;
+    text-align: center;
+  }
+  button.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    font-weight: 600;
+  }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .divider {
+    display: flex;
+    align-items: center;
+    color: var(--muted);
+    font-size: 0.8rem;
+    margin: 18px 0;
+    gap: 10px;
+  }
+  .divider::before, .divider::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+  input[type="file"] { display: none; }
+  #result {
+    margin-top: 20px;
+    text-align: center;
+  }
+  #digit {
+    font-size: 3rem;
+    font-weight: 700;
+    line-height: 1;
+    min-height: 3.5rem;
+  }
+  #confidence { color: var(--muted); font-size: 0.9rem; }
+  table { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 0.85rem; }
+  td { padding: 3px 4px; }
+  td.p-digit { color: var(--muted); width: 20px; }
+  td.p-bar { width: 100%; }
+  .bar-track { background: var(--border); border-radius: 4px; height: 8px; overflow: hidden; }
+  .bar-fill { background: var(--accent); height: 100%; }
+  td.p-val { color: var(--muted); text-align: right; width: 46px; }
+  #error { color: #d84343; font-size: 0.85rem; margin-top: 10px; text-align: center; }
+</style>
+
+<div class="card">
+  <h1>Digit Recognizer</h1>
+  <p class="sub">Draw a digit (0–9) below, or upload a raw image.</p>
+
+  <canvas id="canvas" width="280" height="280"></canvas>
+
+  <div class="row">
+    <button id="clearBtn">Clear</button>
+    <button id="predictBtn" class="primary">Predict</button>
+  </div>
+
+  <div class="divider">or</div>
+
+  <label class="upload-btn" for="fileInput">Upload an image</label>
+  <input type="file" id="fileInput" accept="image/*" />
+
+  <div id="result">
+    <div id="digit"></div>
+    <div id="confidence"></div>
+    <table id="probTable"></table>
+  </div>
+  <div id="error"></div>
+</div>
+
+<script src="app.js"></script>
+<script>
+  const API_URL = resolveApiUrl(window.location.hostname, window.location.protocol);
+
+  const canvas = document.getElementById("canvas");
+  const ctx = canvas.getContext("2d");
+  const predictBtn = document.getElementById("predictBtn");
+  const clearBtn = document.getElementById("clearBtn");
+  const fileInput = document.getElementById("fileInput");
+  const digitEl = document.getElementById("digit");
+  const confidenceEl = document.getElementById("confidence");
+  const probTable = document.getElementById("probTable");
+  const errorEl = document.getElementById("error");
+
+  function resetCanvas() {
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.strokeStyle = "#fff";
+    ctx.lineWidth = 18;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+  }
+  resetCanvas();
+
+  let drawing = false;
+  let lastPos = null;
+
+  function getPos(evt) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const point = evt.touches ? evt.touches[0] : evt;
+    return {
+      x: (point.clientX - rect.left) * scaleX,
+      y: (point.clientY - rect.top) * scaleY,
+    };
+  }
+
+  function startDraw(evt) {
+    drawing = true;
+    lastPos = getPos(evt);
+    evt.preventDefault();
+  }
+  function moveDraw(evt) {
+    if (!drawing) return;
+    const pos = getPos(evt);
+    ctx.beginPath();
+    ctx.moveTo(lastPos.x, lastPos.y);
+    ctx.lineTo(pos.x, pos.y);
+    ctx.stroke();
+    lastPos = pos;
+    evt.preventDefault();
+  }
+  function endDraw() {
+    drawing = false;
+  }
+
+  canvas.addEventListener("mousedown", startDraw);
+  canvas.addEventListener("mousemove", moveDraw);
+  window.addEventListener("mouseup", endDraw);
+  canvas.addEventListener("touchstart", startDraw);
+  canvas.addEventListener("touchmove", moveDraw);
+  canvas.addEventListener("touchend", endDraw);
+
+  clearBtn.addEventListener("click", () => {
+    resetCanvas();
+    clearResult();
+  });
+
+  function clearResult() {
+    digitEl.textContent = "";
+    confidenceEl.textContent = "";
+    probTable.innerHTML = "";
+    errorEl.textContent = "";
+  }
+
+  function renderResult(data) {
+    digitEl.textContent = data.digit;
+    confidenceEl.textContent = `${formatPercent(data.confidence)} confidence`;
+    probTable.innerHTML = probabilitiesTableHtml(data.probabilities);
+  }
+
+  async function sendToApi(blob) {
+    clearResult();
+    predictBtn.disabled = true;
+    predictBtn.textContent = "Predicting…";
+    try {
+      const formData = new FormData();
+      formData.append("file", blob, "digit.png");
+      const res = await fetch(API_URL, { method: "POST", body: formData });
+      if (!res.ok) {
+        const detail = await res.json().catch(() => ({}));
+        throw new Error(detail.detail || `Request failed (${res.status})`);
+      }
+      const data = await res.json();
+      renderResult(data);
+    } catch (err) {
+      errorEl.textContent = err.message || "Something went wrong.";
+    } finally {
+      predictBtn.disabled = false;
+      predictBtn.textContent = "Predict";
+    }
+  }
+
+  predictBtn.addEventListener("click", () => {
+    canvas.toBlob((blob) => sendToApi(blob), "image/png");
+  });
+
+  fileInput.addEventListener("change", () => {
+    const file = fileInput.files[0];
+    if (file) sendToApi(file);
+    fileInput.value = "";
+  });
+</script>

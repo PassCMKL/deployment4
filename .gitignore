@@ -1,0 +1,16 @@
+.venv*/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+node_modules/
+data/
+backend/predictions.db*
+backend/baseline.json
+backend/model_candidate.onnx
+backend/model_fp32_prev.onnx
+*.tmp
+retrain/retrain_state.json
+retrain/retrain_history.jsonl
+models/current_deployed.pt
+models/previous_deployed.pt

@@ -1,0 +1,28 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: mnist-redis
+    ports:
+      - "6379:6379"
+
+  backend:
+    build: ./backend
+    container_name: mnist-backend-v3
+    environment:
+      - REDIS_HOST=redis
+    ports:
+      - "8000:8000"
+    volumes:
+      # share backend/ with the host so predictions.db and the model file
+      # are the SAME files the dashboard and retrain script see
+      - ./backend:/app
+    depends_on:
+      - redis
+
+  frontend:
+    build: ./frontend
+    container_name: mnist-frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
