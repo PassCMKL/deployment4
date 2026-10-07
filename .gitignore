@@ -14,3 +14,5 @@ retrain/retrain_state.json
 retrain/retrain_history.jsonl
 models/current_deployed.pt
 models/previous_deployed.pt
+
+*.log

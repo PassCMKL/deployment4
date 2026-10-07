@@ -1,13 +1,13 @@
 services:
   redis:
     image: redis:7-alpine
-    container_name: mnist-redis
+    container_name: m4-redis
     ports:
       - "6379:6379"
 
   backend:
     build: ./backend
-    container_name: mnist-backend-v3
+    container_name: m4-backend
     environment:
       - REDIS_HOST=redis
     ports:
@@ -21,7 +21,7 @@ services:
 
   frontend:
     build: ./frontend
-    container_name: mnist-frontend
+    container_name: m4-frontend
     ports:
       - "8080:80"
     depends_on:
